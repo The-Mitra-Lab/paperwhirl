@@ -37,8 +37,9 @@ list for easy retrieval later.
 
 - **An Apple Silicon Mac** (M1 or later).
 - **An OpenAI API key.** PaperWhirl uses your own key to read and summarize
-  papers — see *How do I get and enter an API key?* below. Costs are pennies-scale
-  per paper (see *What does it cost?*).
+  papers — see *How do I get and enter an API key?* below. Cost ranges from a few
+  cents to a few tens of cents per paper depending on the model (see
+  *What does it cost?*).
 - **For paywalled papers, a network with publisher access.** Open-access papers
   and preprints work from anywhere. For subscription journals, PaperWhirl can
   only fetch what your network can — so you'll want to be on your institution's
@@ -139,8 +140,9 @@ there's no PaperWhirl server, and we never see it.
 
 ### What does it cost?
 
-PaperWhirl itself is free. You pay only for your own OpenAI usage, which is
-pennies-scale per paper. Two ways to keep costs down:
+PaperWhirl itself is free — you pay only for your own OpenAI usage. On the
+default frontier model, a paper typically costs on the order of tens of cents;
+on a cheaper tier it drops to a few cents. Two ways to keep costs down:
 
 - **Choose a cheaper model.** PaperWhirl defaults to a frontier model for the
   best summaries, but you can switch to a cheaper tier (e.g. a *mini* or *nano*
