@@ -1,0 +1,32 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:default",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        {
+          "url": "https://pmc.ncbi.nlm.nih.gov/**"
+        },
+        {
+          "url": "https://www.ncbi.nlm.nih.gov/**"
+        },
+        {
+          "url": "https://europepmc.org/**"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-teal-650: #4a7c7e;
+  --color-teal-550: #5a9a9c;
+  --color-warm-50: #faf9f7;
+  --color-warm-100: #f3f1ed;
+  --color-warm-200: #e5e2db;
+  --color-warm-400: #a8a29e;
+  --color-warm-700: #44403c;
+  --color-warm-800: #292524;
+  --color-warm-900: #1c1917;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Stage 5 E7 S18: KaTeX display equations can be wider than the narrow
+   figure/table columns. Let them scroll horizontally instead of
+   overflowing the card. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25rem;
+}

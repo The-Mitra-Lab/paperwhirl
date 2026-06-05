@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperwhirl"
+version = "0.1.2"
+description = "Interactive, figure-grounded paper review tool"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Rob Mitra" },
+]
+dependencies = [
+    # Web app
+    "fastapi",
+    "uvicorn",
+    "starlette",
+    # Stage 6 E2: required by FastAPI's Form() / UploadFile routes
+    # (/api/generate/stream takes a multipart upload). Was
+    # transitively in the dev micromamba env but not declared, so
+    # the bundled interpreter was missing it.
+    "python-multipart",
+    # Generation / packet I/O
+    "pyyaml",
+    "openai",
+    # HTTP + HTML extraction
+    "requests",
+    "beautifulsoup4",
+    "lxml",
+    "pillow",
+    # pdfplumber gives us drawing-primitive bboxes per page — used by
+    # extract.crop_assets_to_figures to crop full-page renders down
+    # to just the figure region on LaTeX/vector-PDF papers.
+    "pdfplumber",
+    # Cloudflare-aware fetch (publisher HTML extractors) and PDF
+    # printing — Chromium itself is installed separately via
+    # `playwright install chromium`.
+    "playwright",
+    "playwright-stealth",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Anthropic SDK was used by an early E2 comparator; not on the
+    # current runtime path. Lives here so contributors who want to
+    # re-run that comparator have it without bloating the wheel.
+    "anthropic",
+]
+
+[project.scripts]
+paperwhirl = "paperwhirl.web.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["paperwhirl*"]
+
+[tool.setuptools.package-data]
+"paperwhirl.web" = ["frontend_dist/**/*"]

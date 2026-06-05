@@ -1,0 +1,1 @@
+import{t as e}from"./index-C2K-A6p3.js";async function t(t,n){await e(`plugin:shell|open`,{path:t,with:n})}export{t as open};

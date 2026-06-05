@@ -1,0 +1,36 @@
+name: paperwhirl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  # Generation / packet rendering
+  - pyyaml
+  - jinja2
+  - openai
+  # HTTP + HTML extraction
+  - requests
+  - beautifulsoup4
+  - lxml
+  - pillow
+  - pdfplumber
+  # PDF tooling: pdftotext / pdfinfo / pdftoppm / pdfimages — used by
+  # the local PDF-upload path in paperwhirl.extract.
+  - poppler
+  # Cloudflare-aware fetch (publisher HTML extractors)
+  - playwright
+  # Web app (FastAPI backend; React frontend is managed by npm under
+  # src/web/frontend)
+  - fastapi
+  - uvicorn
+  - starlette
+  - pip:
+      # Not on conda-forge — needed to clear Cloudflare on cell.com,
+      # science.org, and biorxiv.org page warm-ups
+      - playwright-stealth
+      # Anthropic SDK for E2 generation-step comparator (Sonnet/Opus)
+      - anthropic
+# After `micromamba env create -f environment.yml`:
+#   micromamba activate paperwhirl
+#   playwright install chromium
+# See README.md for the full bring-up sequence.

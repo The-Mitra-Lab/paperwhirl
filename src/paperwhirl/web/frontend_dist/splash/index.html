@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PaperWhirl</title>
+  <style>
+    /* Splash shown while the Python sidecar warms up (~1-2 s cold start).
+       Polls /api/config on the backend port given by ?port=… and redirects
+       to / once the backend responds.
+
+       Deviation from EXPERIMENT6.md: the spec said this would live in
+       src/paperwhirl/web/splash/ and be served by Tauri's resource scheme.
+       It actually lives in src/web/frontend/public/splash/ — Vite copies
+       public/* into dist/ at build time, so the same file works in dev
+       (served by Vite at /splash/) and in production (bundled into the
+       .app's frontendDist). No separate Tauri resource handler needed. */
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #f5ede0;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: default;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* macOS hidden-title-bar leaves a tiny strip at the top for the
+         traffic lights to overlay onto. The splash background fills the
+         full window, so nothing to adjust here. */
+    }
+
+    .icon {
+      width: 220px;
+      height: 220px;
+      animation: spin 4s linear infinite;
+      transform-origin: 50% 50%;
+      will-change: transform;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Respect the user's reduced-motion preference. */
+    @media (prefers-reduced-motion: reduce) {
+      .icon {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <img class="icon" src="icon.png" alt="">
+  <script>
+    // The Tauri shell appends ?port=<assigned> when it opens this URL.
+    // Outside Tauri (manual dev test), fall back to the conventional
+    // PaperWhirl port 8000.
+    const params = new URLSearchParams(window.location.search);
+    const port = params.get('port') || '8000';
+    const host = params.get('host') || '127.0.0.1';
+    const probeUrl = `http://${host}:${port}/api/config`;
+    const appUrl = `http://${host}:${port}/`;
+
+    async function probe() {
+      try {
+        const r = await fetch(probeUrl, { cache: 'no-store' });
+        if (r.ok) {
+          // Backend is up. Hand off to the real SPA.
+          window.location.replace(appUrl);
+          return;
+        }
+      } catch (_) {
+        // Not ready yet, keep polling.
+      }
+      setTimeout(probe, 150);
+    }
+
+    probe();
+  </script>
+</body>
+</html>
