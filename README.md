@@ -1,17 +1,11 @@
 <p align="center">
-  <img src="docs/logo.png" alt="" width="260">
+  <img src="docs/screenshots/hero.png" alt="A PaperWhirl summary with the Discuss panel open" width="840">
 </p>
-
-<h1 align="center">PaperWhirl</h1>
 
 <p align="center">
   <b>Fast, figure-grounded paper review for your Mac.</b><br>
   Drop in a paper, get a claim-driven summary with every figure explained,
   then talk to it.
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/hero.png" alt="A PaperWhirl summary with the Discuss panel open" width="840">
 </p>
 
 ## Why PaperWhirl?
@@ -154,12 +148,3 @@ pennies-scale per paper. Two ways to keep costs down:
 - **Set a spending limit.** You can cap monthly spend on your key directly in
   the [OpenAI Platform](https://platform.openai.com/settings/organization/limits),
   so there are no surprises.
-
----
-
-## `models.json`
-
-The live list of models the app offers in Settings. The app fetches this on
-startup, so the in-app model menu can be updated **without shipping a new
-build** — edit this file to change the menu for all installs. The app falls
-back to a built-in list if this file is unreachable.
