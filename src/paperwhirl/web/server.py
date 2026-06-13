@@ -322,6 +322,7 @@ async def generate_stream(
     identifier: str = Form(""),
     api_key: str = Form(""),
     force_slug: str = Form(""),
+    mode: str = Form("full"),
 ):
     """Streaming generation: emits SSE events as each section completes.
 
@@ -354,10 +355,14 @@ async def generate_stream(
       {"type":"done","slug":"..."}          — after final yaml written
       {"type":"error","error":"..."}        — on fatal error
     """
+    # Stage 7 E2: Scan mode runs zero LLM calls (it renders abstract +
+    # figures + legends straight from extraction), so it does not need
+    # an API key. Only require one for Deep Dive (mode="full").
     key = _resolve_key(api_key)
-    if not key:
+    if mode != "scan" and not key:
         raise HTTPException(status_code=401, detail="OpenAI API key required")
-    os.environ["OPENAI_API_KEY"] = key
+    if key:
+        os.environ["OPENAI_API_KEY"] = key
 
     # Read the PDF bytes here (inside the request handler) before the
     # async generator runs — UploadFile.read() needs the request body
@@ -561,6 +566,18 @@ async def generate_stream(
             for warning_msg in skel.get("warnings", []):
                 yield sse({"type": "warning", "message": warning_msg})
 
+            # Stage 7 E2: Scan mode stops here — no LLM. The skeleton
+            # already conforms to review_session.v2 (empty overview /
+            # per-figure analysis / discussion), so persist it AS the
+            # review packet with mode="scan" and finish. The frontend
+            # renders Overview=abstract + figures+legends from it; a
+            # later Deep Dive Re-generate (mode="full") replaces it.
+            if mode == "scan":
+                skel.setdefault("session", {})["mode"] = "scan"
+                write_yaml(skel, paper_dir / "review_session.yaml")
+                yield sse({"type": "done", "slug": slug})
+                return
+
             # 2. Overview call.
             overview_prompt = build_overview_prompt(skel)
             overview_future = loop.run_in_executor(
@@ -740,12 +757,26 @@ async def list_packets():
 
 @app.get("/api/assets/{slug}/{path:path}")
 async def serve_asset(slug: str, path: str):
+    # Stage 7 E1: serve cache (generation/browse) assets with
+    # Cache-Control: no-store. Under WKWebView a transient image GET
+    # failure during the busy generation window was being
+    # negatively-cached against this URL, leaving a figure stuck on the
+    # broken-image placeholder until a save→reopen switched it to the
+    # library URL. no-store keeps WKWebView from caching that failure —
+    # and we set it on the 404 too (the cached 404 was the thing that
+    # stuck), which means returning a real response, not raising, so the
+    # header rides along.
+    no_store = {"Cache-Control": "no-store"}
     file_path = RESULTS_DIR / slug / path
     if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Asset not found")
+        return JSONResponse(
+            status_code=404, content={"detail": "Asset not found"}, headers=no_store
+        )
     if not file_path.resolve().is_relative_to(RESULTS_DIR.resolve()):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return FileResponse(file_path)
+        return JSONResponse(
+            status_code=403, content={"detail": "Forbidden"}, headers=no_store
+        )
+    return FileResponse(file_path, headers=no_store)
 
 
 def _load_paper_references(slug: str) -> list[dict]:
@@ -1662,6 +1693,57 @@ async def put_paper_discussion(slug: str, request: Request):
         "messages": messages,
     }, sort_keys=False, allow_unicode=True))
     return {"slug": slug, "count": len(messages)}
+
+
+def _highlights_path(folder: Path, slug: str) -> Path | None:
+    """Stage 7 E4: pick the right highlights.yaml location — library
+    copy if the paper is saved, else the cache copy, else None.
+    Mirrors `_discussion_path`."""
+    if rl.is_saved(folder, slug):
+        return rl.paper_dir(folder, slug) / "highlights.yaml"
+    cache_dir = RESULTS_DIR / slug
+    if cache_dir.exists():
+        return cache_dir / "highlights.yaml"
+    return None
+
+
+@app.get("/api/papers/{slug}/highlights")
+async def get_paper_highlights(slug: str):
+    folder = _require_folder()
+    path = _highlights_path(folder, slug)
+    if path is None or not path.exists():
+        return {"highlights": []}
+    data = yaml.safe_load(path.read_text()) or {}
+    return {"highlights": data.get("highlights", [])}
+
+
+@app.put("/api/papers/{slug}/highlights")
+async def put_paper_highlights(slug: str, request: Request):
+    folder = _require_folder()
+    # Same ClientDisconnect tolerance as the Discuss auto-PUT (the
+    # frontend auto-saves highlights on change).
+    from starlette.requests import ClientDisconnect
+    try:
+        body = await request.json()
+    except ClientDisconnect:
+        return Response(status_code=499)
+    highlights = (body or {}).get("highlights", [])
+    if not isinstance(highlights, list):
+        raise HTTPException(status_code=400, detail="highlights must be a list")
+    path = _highlights_path(folder, slug)
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"paper {slug!r} not in library or cache",
+        )
+    from datetime import datetime, timezone
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({
+        "schema_version": "paperwhirl.highlights.v1",
+        "updated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "highlights": highlights,
+    }, sort_keys=False, allow_unicode=True))
+    return {"slug": slug, "count": len(highlights)}
 
 
 def _packet_markdown(packet: dict, display_name: str, discussion: list[dict] | None = None) -> str:

@@ -427,6 +427,9 @@ def save_packet(folder: Path, paper_slug: str, source_dir: Path) -> dict[str, An
         "session_skeleton.yaml",
         "extracted_text.txt",
         "discussion.yaml",
+        # Stage 7 E4: browse-time highlights migrate with the packet,
+        # same as the Discuss thread.
+        "highlights.yaml",
     ):
         src = source_dir / name
         if src.exists():

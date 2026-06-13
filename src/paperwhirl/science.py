@@ -388,6 +388,7 @@ def extract(
         "paper": {
             "id": slug,
             "title": meta["title"],
+            "abstract": meta.get("abstract", ""),
             "authors": authors,
             "first_author": authors[0].split()[-1] if authors else "",
             "year": meta["year"],

@@ -1767,6 +1767,7 @@ def _build_biorxiv_skeleton_from_jats(
         "paper": {
             "id": slug,
             "title": title,
+            "abstract": parsed.get("abstract", ""),
             "authors": authors,
             "first_author": authors[0].split()[-1] if authors else "",
             # Stage 6 E7 (2026-05-26): year was hard-coded None and

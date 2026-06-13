@@ -5,12 +5,18 @@ interface CollapsibleProps {
   title: string;
   children: ReactNode;
   defaultOpen?: boolean;
+  /** Stage 7 E4: marks this section's content as a highlight anchor
+   * scope. The highlight hook (in PacketView) finds sections by this
+   * `data-hl-key` and stores highlight offsets relative to the
+   * section's text. */
+  hlKey?: string;
 }
 
 export default function Collapsible({
   title,
   children,
   defaultOpen = false,
+  hlKey,
 }: CollapsibleProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -29,7 +35,7 @@ export default function Collapsible({
         {title}
       </button>
       {open && (
-        <div className="pt-3 px-3">
+        <div className="pt-3 px-3" data-hl-key={hlKey}>
           {children}
           <div className="flex justify-center mt-3">
             <button

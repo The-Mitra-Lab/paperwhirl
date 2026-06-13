@@ -28,3 +28,11 @@ body {
   overflow-y: hidden;
   padding-block: 0.25rem;
 }
+
+/* Stage 7 E4: manual highlight color for the CSS Custom Highlight API.
+   Highlights are registered under the "pw-highlight" name by
+   useHighlights; this paints them without any DOM mutation. */
+::highlight(pw-highlight) {
+  background-color: #fde68a; /* amber-200 */
+  color: inherit;
+}

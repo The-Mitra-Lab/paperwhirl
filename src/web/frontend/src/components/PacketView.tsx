@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import type { ReviewPacket, Figure, Table } from "../types";
 import Collapsible from "./Collapsible";
@@ -6,6 +7,7 @@ import TableCard from "./TableCard";
 import SaveToList from "./SaveToList";
 import DownloadButtons from "./DownloadButtons";
 import MathMarkdown from "./MathMarkdown";
+import { useHighlights } from "../lib/useHighlights";
 
 const PROSE = "prose prose-sm max-w-none prose-p:text-warm-700 prose-p:leading-relaxed prose-p:my-0 prose-li:text-warm-700";
 
@@ -30,6 +32,15 @@ interface PacketViewProps {
   /** E8 Re-generate: replace the saved review packet with a fresh
    * generation. Confirms in the parent before firing. */
   onRegenerate?: (paperSlug: string, paper: ReviewPacket["paper"]) => void;
+  /** Stage 7 E1: bumped by the parent on the generation `done` event
+   * (and at generation start) so figure cards re-attempt any image
+   * that got stuck broken during generation. Threaded straight to
+   * FigureCard. */
+  reloadKey?: number;
+  /** Stage 7 E2: render in Scan mode — Overview shows the paper's
+   * abstract (not generated claims), figures show image + original
+   * legend only (no analysis), and the Closing Discussion is hidden. */
+  scanView?: boolean;
 }
 
 function StillThinking() {
@@ -69,11 +80,20 @@ type Item =
 export default function PacketView({
   packet, baseUrl, generating = false, paperSlug, onSaved,
   isSaved = false, hasDiscussion = false, hasLocalManuscript = false,
-  listMemberships = [], onRegenerate,
+  listMemberships = [], onRegenerate, reloadKey = 0, scanView = false,
 }: PacketViewProps) {
   const { paper, overview, figures, discussion, session } = packet;
   const tables = packet.tables || [];
   const byline = formatByline(paper);
+  // Stage 7 E4: manual highlights over the prose. Anchored per
+  // Collapsible section (data-hl-key); rendered via the CSS Custom
+  // Highlight API. Disabled while generating (the text is still
+  // streaming, so offsets aren't stable yet).
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useHighlights(paperSlug || "", containerRef, {
+    enabled: !generating,
+    reloadKey,
+  });
   // Merge figures + tables and sort by source_order so cards arrive in
   // the paper's natural reading order (Fig 1 -> Fig 2 -> Table 1 -> ...).
   const items: Item[] = [
@@ -99,7 +119,7 @@ export default function PacketView({
     discussion.next_steps.length === 0;
 
   return (
-    <div className="w-full max-w-3xl mx-auto mt-8 pb-16">
+    <div ref={containerRef} className="w-full max-w-3xl mx-auto mt-8 pb-16">
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1">
           <h2 className="text-lg font-semibold text-warm-900 leading-snug">
@@ -132,7 +152,17 @@ export default function PacketView({
         </div>
       )}
 
-      <Collapsible title="Overview">
+      {/* Stage 7 E2: Scan view shows the paper's abstract. If none was
+          captured (papers extracted before abstracts were threaded, or
+          an extractor that returned an empty abstract), fall back to the
+          generated overview when one exists — so a deep-dived paper
+          flipped to Scan still shows something useful (existing content,
+          not a fresh LLM call) rather than an empty card. */}
+      <Collapsible title={scanView && paper.abstract ? "Abstract" : "Overview"} hlKey="overview">
+        {scanView && paper.abstract ? (
+          <MathMarkdown block text={paper.abstract} className={`text-sm ${PROSE}`} />
+        ) : (
+        <>
         {overviewEmpty && generating && <StillThinking />}
         <div className="space-y-3">
           {overview.background && (
@@ -181,18 +211,23 @@ export default function PacketView({
             </div>
           )}
         </div>
+        </>
+        )}
       </Collapsible>
 
-      {/* Don't show figure / table cards or closing discussion until at
-          least the overview has rendered — otherwise the page is just a
-          wall of "Thinking..." which is noise. */}
-      {!overviewEmpty && items.map((it) =>
+      {/* Figures + tables. In Deep Dive we wait until the overview has
+          rendered (otherwise the page is a wall of "Thinking..."); in
+          Scan there's no overview, so render as soon as the skeleton
+          (figure images + legends) is up. */}
+      {(scanView || !overviewEmpty) && items.map((it) =>
         it.kind === "figure" ? (
           <FigureCard
             key={`fig-${it.idx}-${it.data.id}`}
             figure={it.data}
             baseUrl={baseUrl}
             generating={generating}
+            reloadKey={reloadKey}
+            scanView={scanView}
           />
         ) : (
           <TableCard
@@ -204,8 +239,8 @@ export default function PacketView({
         )
       )}
 
-      {!overviewEmpty && (
-      <Collapsible title="Closing Discussion">
+      {!scanView && !overviewEmpty && (
+      <Collapsible title="Closing Discussion" hlKey="discussion">
         {discussionEmpty && generating && <StillThinking />}
         {discussion.synthesis && (
           <div className="mb-3">
@@ -258,7 +293,7 @@ export default function PacketView({
           closing discussion. Single border, single mt offset.
           E8: dropped the isSaved gate so browse-mode papers (cache
           only) can also download. */}
-      {!overviewEmpty && !generating && paperSlug && (
+      {(scanView || !overviewEmpty) && !generating && paperSlug && (
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-warm-100 pt-3">
           <DownloadButtons
             paperSlug={paperSlug}
@@ -290,7 +325,7 @@ export default function PacketView({
           )}
         </div>
       )}
-      {!overviewEmpty && !generating && paperSlug && listMemberships.length > 0 && (
+      {(scanView || !overviewEmpty) && !generating && paperSlug && listMemberships.length > 0 && (
         // Stage 6 E7 (2026-05-26): discrete list-membership line under
         // the action row. Same left edge as the bars and the buttons.
         <p className="mt-3 text-xs text-warm-400">

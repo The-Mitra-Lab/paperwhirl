@@ -1,6 +1,6 @@
 [package]
 name = "paperwhirl-shell"
-version = "0.1.2"
+version = "0.1.3"
 description = "PaperWhirl desktop app shell"
 authors = ["Rob Mitra"]
 license = ""

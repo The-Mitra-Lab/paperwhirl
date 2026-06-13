@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Figure } from "../types";
 import Collapsible from "./Collapsible";
 import MathMarkdown from "./MathMarkdown";
+import ImageLightbox from "./ImageLightbox";
 
 // Shared prose styling for math-rendered packet fields: typography
 // plugin classes + warm text color, paragraph margins collapsed so the
@@ -12,9 +13,20 @@ interface FigureCardProps {
   figure: Figure;
   baseUrl: string;
   generating?: boolean;
+  /** Stage 7 E1: bumped by the parent when generation completes
+   * (the `done` SSE event) and at generation start. A change resets
+   * this card's broken/retry state and produces a fresh image URL,
+   * so a figure that got stuck broken during the busy generation
+   * window self-heals once the assets are guaranteed materialized —
+   * no save→reopen needed. */
+  reloadKey?: number;
+  /** Stage 7 E2: Scan mode — show only the figure image + original
+   * legend; hide the generated analysis block (it doesn't exist in
+   * Scan). */
+  scanView?: boolean;
 }
 
-export default function FigureCard({ figure, baseUrl, generating = false }: FigureCardProps) {
+export default function FigureCard({ figure, baseUrl, generating = false, reloadKey = 0, scanView = false }: FigureCardProps) {
   const { view, analysis } = figure;
   const [zoomed, setZoomed] = useState(false);
   // Stage 5 E16 (2026-05-24): retry-on-error for the figure image.
@@ -34,13 +46,55 @@ export default function FigureCard({ figure, baseUrl, generating = false }: Figu
   //     image error handler immediately fell through to the broken
   //     branch and the user saw nothing change. Resetting the
   //     budget gives the filesystem-write race time to resolve.
+  //
+  // Stage 7 E1 (2026-06-12): the ×3 auto-retry wasn't enough. Under
+  // WKWebView a transient image GET failure during the busy generation
+  // window (concurrent SSE + fetch + image loads, made worse by
+  // toggling Discuss) gets negatively cached against the URL; when the
+  // 3 attempts burn before recovery, `broken` stuck forever and
+  // NOTHING re-requested the image even though the file was on disk —
+  // only save→reopen fixed it (a different, library-path URL). Two
+  // fixes here: (a) ALWAYS cache-bust the URL (every distinct attempt
+  // is a unique URL WKWebView can't have poisoned), and (b) reset on
+  // `reloadKey` change so the parent's generation-`done` signal
+  // self-heals any stuck figure. The buster is stable across the many
+  // re-renders streaming causes (it only moves on error/reload), so it
+  // does NOT thrash the image on every render.
   const [gen, setGen] = useState(0);
   const [retriesLeft, setRetriesLeft] = useState(3);
   const [broken, setBroken] = useState(false);
+  // Tracks whether this figure's image ever loaded successfully, so the
+  // generation-`done` signal can re-attempt ONLY figures that never
+  // loaded — healthy figures aren't re-fetched and don't flicker. A ref
+  // (not state) because the reloadKey effect reads it without wanting it
+  // in its dep list.
+  const loadedRef = useRef(false);
+  // New image identity (URL base or asset changed — e.g. save→reopen
+  // switches the cache URL to the library URL): full reset.
+  useEffect(() => {
+    loadedRef.current = false;
+    setBroken(false);
+    setRetriesLeft(3);
+    setGen(0);
+  }, [baseUrl, view.asset]);
+  // Parent reload signal (generation `done`): assets are now guaranteed
+  // on disk, so re-attempt any figure still stuck broken / never loaded.
+  // Skip the initial mount (the effect above already handled it) and
+  // skip figures that already loaded fine (no needless re-fetch).
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    if (!loadedRef.current) {
+      setBroken(false);
+      setRetriesLeft(3);
+      setGen((g) => g + 1);
+    }
+  }, [reloadKey]);
   const imgSrc = view.asset
-    ? gen === 0
-      ? `${baseUrl}/${view.asset}`
-      : `${baseUrl}/${view.asset}?_=${gen}`
+    ? `${baseUrl}/${view.asset}?_=${reloadKey}.${gen}`
     : "";
   const handleImgError = () => {
     if (retriesLeft > 0) {
@@ -65,7 +119,7 @@ export default function FigureCard({ figure, baseUrl, generating = false }: Figu
   const title = figure.label?.replace(/\.$/, "") || figure.id.replace(/_/g, " ");
 
   return (
-    <Collapsible title={title}>
+    <Collapsible title={title} hlKey={`fig-${figure.id}`}>
       {cardEmpty && generating && (
         <p className="text-sm text-warm-400 italic">Thinking…</p>
       )}
@@ -76,19 +130,17 @@ export default function FigureCard({ figure, baseUrl, generating = false }: Figu
             alt={figure.label}
             onClick={() => setZoomed(true)}
             onError={handleImgError}
+            onLoad={() => {
+              loadedRef.current = true;
+            }}
             className="w-full max-w-xl rounded mb-4 cursor-zoom-in"
           />
           {zoomed && (
-            <div
-              onClick={() => setZoomed(false)}
-              className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out p-8"
-            >
-              <img
-                src={imgSrc}
-                alt={figure.label}
-                className="max-w-full max-h-full object-contain rounded shadow-lg"
-              />
-            </div>
+            <ImageLightbox
+              src={imgSrc}
+              alt={figure.label}
+              onClose={() => setZoomed(false)}
+            />
           )}
         </>
       )}
@@ -128,6 +180,9 @@ export default function FigureCard({ figure, baseUrl, generating = false }: Figu
         order: Motivation → Question → Approach → Results →
         Evidence → Interpretation → Linked claims.
       */}
+      {/* Stage 7 E2: the analysis block is generated content — hidden
+          in Scan mode, which shows only the figure image + legend. */}
+      {!scanView && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 text-sm">
         <div className="flex flex-col gap-4">
           <AnalysisField label="Motivation" text={analysis.motivation} />
@@ -146,6 +201,7 @@ export default function FigureCard({ figure, baseUrl, generating = false }: Figu
           </div>
         </div>
       </div>
+      )}
 
     </Collapsible>
   );

@@ -8,6 +8,7 @@ import DiscussPanel from "./components/DiscussPanel";
 import FirstRunModal from "./components/FirstRunModal";
 import ReadingListRail from "./components/ReadingListRail";
 import PrintView from "./components/PrintView";
+import ScanToggle from "./components/ScanToggle";
 import type { ReviewPacket } from "./types";
 import { confirmAction } from "./lib/dialogs";
 import { apiFetch, apiBaseSync } from "./lib/api";
@@ -25,6 +26,11 @@ const isTauriEnv = (): boolean =>
 export default function App() {
   const [packet, setPacket] = useState<ReviewPacket | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
+  // Stage 7 E1: bumped at generation start (skeleton) and completion
+  // (done) so FigureCard re-attempts any image that got stuck broken
+  // during the busy generation window — self-heals without the old
+  // save→reopen workaround. Threaded through PacketView to FigureCard.
+  const [figureReloadKey, setFigureReloadKey] = useState(0);
   // Stage 6 E5: backend signals when <data>/papers/<slug>/ has a
   // local manuscript.pdf or uploaded.pdf. Lets the Download-manuscript
   // button show for no-identifier saved papers (sample_et_al-style).
@@ -80,6 +86,22 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("pw_discuss_width", String(discussWidth));
   }, [discussWidth]);
+
+  // Stage 7 E2: Scan vs Deep Dive. scanMode=true → extract + render
+  // abstract + figures + legends with NO LLM (near-free + instant);
+  // false → the full generated Deep Dive summary. DEFAULT is Scan
+  // (cheap triage); the toggle then remembers the user's last choice
+  // (localStorage, like the rail prefs). A ref mirrors it so the
+  // generate() callback reads the current value without a stale
+  // closure / dep churn.
+  const [scanMode, setScanMode] = useState<boolean>(
+    () => localStorage.getItem("pw_scan_mode") !== "false",
+  );
+  const scanModeRef = useRef(scanMode);
+  useEffect(() => {
+    scanModeRef.current = scanMode;
+    localStorage.setItem("pw_scan_mode", String(scanMode));
+  }, [scanMode]);
 
   // generating === true while the SSE stream is still in flight.
   // PacketView/FigureCard use this to decide "empty section -> still
@@ -278,7 +300,7 @@ export default function App() {
     async (
       file: File | null,
       identifier: string,
-      opts?: { forceSlug?: string; autoSaveOnDone?: boolean },
+      opts?: { forceSlug?: string; autoSaveOnDone?: boolean; mode?: "scan" | "full" },
     ) => {
       // Abort any prior stream still running, then open a new one.
       generateAbortRef.current?.abort();
@@ -313,6 +335,12 @@ export default function App() {
       // save⇔list invariant from Stage 4 E8. Caller decides via
       // `autoSaveOnDone`; defaults off.
       const autoSaveOnDone = opts?.autoSaveOnDone === true;
+      // Stage 7 E2: explicit mode wins (Re-generate passes "full" when
+      // promoting a Scan paper to Deep Dive); otherwise follow the
+      // user's current Scan/Deep-Dive toggle. Read via the ref so this
+      // callback isn't re-created on every toggle.
+      const reqMode: "scan" | "full" =
+        opts?.mode ?? (scanModeRef.current ? "scan" : "full");
 
       try {
         const formData = new FormData();
@@ -321,6 +349,7 @@ export default function App() {
         } else {
           formData.append("identifier", identifier);
         }
+        formData.append("mode", reqMode);
         if (forceSlug) {
           // E8 Re-generate path. Skips the paste-opens pre-check on
           // the server AND pins the cache subdir to forceSlug so a
@@ -388,6 +417,11 @@ export default function App() {
               resolvedSlug = payload.slug;
               setSlug(payload.slug);
               setBaseUrl(`${apiBaseSync()}/api/assets/${payload.slug}`);
+              // Fresh generation → fresh image cache-buster nonce, so a
+              // re-generate of the same slug (same baseUrl) still forces
+              // figure cards to re-load rather than reuse a possibly
+              // poisoned WKWebView cache entry. (Stage 7 E1.)
+              setFigureReloadKey((k) => k + 1);
               // Stage 5 E2 tire-kick fix: hydrate per-paper Discuss
               // from disk if this slug has a prior discussion.yaml
               // (e.g., a cached re-extraction the user discussed
@@ -406,7 +440,7 @@ export default function App() {
               // Build a scaffold packet so PacketView can render immediately.
               next = {
                 schema_version: "paperwhirl.review_session.v2",
-                session: { id: payload.slug, title: payload.paper?.title || "" },
+                session: { id: payload.slug, title: payload.paper?.title || "", mode: reqMode },
                 paper: payload.paper || {
                   id: payload.slug,
                   title: "",
@@ -527,6 +561,12 @@ export default function App() {
               // to overwrite the saved entry, so we POST /save with
               // overwrite=true and reopen the saved packet.
               if (payload.slug) resolvedSlug = payload.slug;
+              // Stage 7 E1: generation finished → assets are guaranteed
+              // materialized on disk. Bump the reload nonce so any
+              // figure that got stuck in the broken state during the
+              // generation window re-requests and self-heals — no
+              // save→reopen needed.
+              setFigureReloadKey((k) => k + 1);
               if (forceSlug && payload.slug && autoSaveOnDone) {
                 try {
                   const r = await apiFetch(
@@ -636,7 +676,11 @@ export default function App() {
   // mirrors the resolution pipeline's priority: DOI > PMCID > arXiv
   // ID > bioRxiv DOI > PMID.
   const regeneratePaper = useCallback(
-    async (paperSlug: string, paper: ReviewPacket["paper"]) => {
+    async (
+      paperSlug: string,
+      paper: ReviewPacket["paper"],
+      opts?: { mode?: "scan" | "full"; skipConfirm?: boolean },
+    ) => {
       const identifier =
         paper.doi ||
         paper.pmcid ||
@@ -658,16 +702,22 @@ export default function App() {
         );
         return;
       }
-      const ok = await confirmAction(
-        wasSaved
-          ? "Re-generate this paper? The existing review packet and " +
-            "discussion thread will be replaced. Display name and reading-list " +
-            "memberships are preserved."
-          : "Re-generate this paper? The current cache packet and " +
-            "discussion thread will be replaced. The paper stays unsaved.",
-        { title: "Re-generate paper?", kind: "warning" },
-      );
-      if (!ok) return;
+      // Stage 7 E2: scan→Deep-Dive promotion passes skipConfirm — the
+      // user flipping the toggle to Deep Dive IS the confirmation, and
+      // a Scan paper has no generated summary to "replace", so the
+      // scary confirm would be noise.
+      if (!opts?.skipConfirm) {
+        const ok = await confirmAction(
+          wasSaved
+            ? "Re-generate this paper? The existing review packet and " +
+              "discussion thread will be replaced. Display name and reading-list " +
+              "memberships are preserved."
+            : "Re-generate this paper? The current cache packet and " +
+              "discussion thread will be replaced. The paper stays unsaved.",
+          { title: "Re-generate paper?", kind: "warning" },
+        );
+        if (!ok) return;
+      }
       // Clear the discussion thread BEFORE starting regeneration so
       // the Discuss panel is empty during the stream — letting the user
       // start a fresh thread against the regenerating packet. Explicit
@@ -686,12 +736,42 @@ export default function App() {
           /* non-fatal; the auto-PUT will retry as messages accumulate */
         }
       }
+      // Stage 7 E4: highlights are tied to a specific generation —
+      // clear them on Re-generate (their anchors won't match the new
+      // text). The done-handler reloadKey bump then re-fetches the
+      // empty set. Works for cache or saved papers.
+      try {
+        await apiFetch(`/api/papers/${paperSlug}/highlights`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ highlights: [] }),
+        });
+      } catch {
+        /* non-fatal */
+      }
       await generate(null, identifier, {
         forceSlug: paperSlug,
         autoSaveOnDone: wasSaved,
+        mode: opts?.mode,
       });
     },
     [generate, savedSlugs],
+  );
+
+  // Stage 7 E2: Scan/Deep-Dive toggle handler. Persists the choice. If
+  // the user flips to Deep Dive while viewing a scan-only paper (no
+  // generated summary yet), kick off a Deep Dive Re-generate so the
+  // toggle actually produces the full summary. Deep Dive → Scan (and
+  // any flip on a paper that already has a full summary) is just a
+  // view change handled in render — instant, non-destructive.
+  const handleScanToggle = useCallback(
+    (next: boolean) => {
+      setScanMode(next);
+      if (!next && slug && packet && packet.session?.mode === "scan") {
+        regeneratePaper(slug, packet.paper, { mode: "full", skipConfirm: true });
+      }
+    },
+    [slug, packet, regeneratePaper],
   );
 
   // Print-mode short-circuit: Playwright's page.pdf() flow loads
@@ -715,6 +795,15 @@ export default function App() {
       />
     );
   }
+
+  // Stage 7 E2: Scan vs Deep Dive view selection, lifted to render
+  // scope so the always-present toggle (rendered just under the Header,
+  // same spot in the landing and paper states) and the packet block
+  // share one value. A scan-only packet (no generated content) always
+  // renders as Scan until the user Deep-Dives it; otherwise the live
+  // toggle decides.
+  const isScanPacket = packet?.session?.mode === "scan";
+  const showScan = isScanPacket ? true : scanMode;
 
   return (
     <div className="min-h-screen bg-white flex">
@@ -832,6 +921,17 @@ export default function App() {
       >
         <Header />
 
+        {/* Stage 7 E2: Scan/Deep-Dive toggle in ONE fixed slot — right
+          * under the Header — so it sits in the exact same place whether
+          * the landing drop-bar or a paper is showing (the Header is
+          * mt-[25vh] in both states). Centered under the logo so it
+          * stays clear of BOTH the left rail and the right Discuss/Search
+          * panel (which covers the right edge when open). In-flow within
+          * the content column, so it reflows with the panel. */}
+        <div className="relative z-20 mt-4 flex justify-center">
+          <ScanToggle scanMode={showScan} onChange={handleScanToggle} />
+        </div>
+
         {/* E8 paste-opens toast. Absolutely positioned inside the main
           * content column so it horizontally centers over the Header
           * title (which is also centered within this column), not the
@@ -894,6 +994,11 @@ export default function App() {
             packet.overview?.gap ||
             packet.overview?.claims?.length
           );
+          // Stage 7 E2: Scan view renders as soon as the skeleton is up
+          // — it has no overview to wait for, so it must not sit on the
+          // Deep-Dive "writing the overview" spinner. (showScan is lifted
+          // to render scope above.)
+          const contentReady = showScan || overviewReady;
           const resetReview = async () => {
             // Same discard-confirmation as openSavedPacket: if a
             // generation is mid-stream, ask before throwing it away.
@@ -943,7 +1048,7 @@ export default function App() {
                 </button>
               </div>
 
-              {!overviewReady ? (
+              {!contentReady ? (
                 <div className="mt-20 flex flex-col items-center text-warm-400">
                   <p className="text-sm italic">Thinking…</p>
                   <p className="text-xs mt-2 text-warm-300">
@@ -962,6 +1067,8 @@ export default function App() {
                   hasLocalManuscript={hasLocalManuscript}
                   listMemberships={listMemberships}
                   onRegenerate={regeneratePaper}
+                  reloadKey={figureReloadKey}
+                  scanView={showScan}
                 />
               )}
             </>

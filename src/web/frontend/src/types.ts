@@ -82,6 +82,10 @@ export interface Discussion {
 export interface Paper {
   id: string;
   title: string;
+  /** Stage 7 E2: the paper's own abstract, carried from extraction.
+   * Shown as the Overview in Scan mode (no LLM). Empty when an
+   * extractor / the PDF fallback couldn't capture one. */
+  abstract?: string;
   authors: string[];
   first_author: string;
   journal: string | null;
@@ -96,6 +100,10 @@ export interface Paper {
 export interface Session {
   id: string;
   title: string;
+  /** Stage 7 E2: "scan" (abstract + figures + legends, no LLM) or
+   * "full" (the generated Deep Dive summary). Absent on older saved
+   * packets → treated as "full". */
+  mode?: "scan" | "full" | string;
 }
 
 export interface ReviewPacket {
