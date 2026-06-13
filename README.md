@@ -29,8 +29,10 @@ on one section of the paper at a time, and you can **highlight** passages as you
 read.
 
 To get started, just drag and drop a PDF — or paste a PMID, PMC number, bioRxiv
-link, DOI, or URL — into the bar. Hit the **D** button in the top-right corner to
-discuss. When you're done, you can download the full manuscript, the AI summary,
+link, DOI, or URL — into the bar. It's most convenient, however, to just use
+PaperWhirl's search function — hit the **S** button in the top-right corner,
+describe what you're looking for, and click a result to load it. Hit the **D**
+button in the top-right corner to discuss. When you're done, you can download the full manuscript, the AI summary,
 or the summary plus your discussion as a PDF, then file the paper into a reading
 list for easy retrieval later.
 
