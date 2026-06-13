@@ -20,10 +20,13 @@ PaperWhirl solves these problems.
 
 ## How Does PaperWhirl Work?
 
-PaperWhirl extracts the text and figures from a manuscript, produces an overview
-and a summary of each figure, and is ready to discuss it with you interactively.
-Each figure can be unrolled individually, so you can focus on one section of the
-paper at a time.
+PaperWhirl extracts the text and figures from a manuscript, then either shows you
+the abstract and figures for an instant, free read (**Scan** mode) or generates a
+full AI overview and a summary of each figure (**Deep Dive** mode). Either way
+it's ready to discuss the paper with you interactively. Each figure can be
+unrolled individually — and clicked to **zoom** in on any panel — so you can focus
+on one section of the paper at a time, and you can **highlight** passages as you
+read.
 
 To get started, just drag and drop a PDF — or paste a PMID, PMC number, bioRxiv
 link, DOI, or URL — into the bar. Hit the **D** button in the top-right corner to
@@ -86,10 +89,13 @@ top-right to search for papers, then click a result to load it.
   <img src="docs/screenshots/search.png" alt="Search panel with results" width="360">
 </p>
 
-**2. Read the overview and figures.** In about 20–30 seconds you'll get the
-overview and a summary of each figure; the full paper takes 1–2 minutes for the
-LLM to finish analyzing. Figures start rolled up — unroll any of them to read
-the summary and look at the figure.
+**2. Scan or Deep Dive.** A toggle under the logo switches between two modes.
+**Scan** (the default) is instant and free — it shows the paper's abstract plus
+every figure and its original legend, with no AI calls, so it's perfect for quick
+triage. **Deep Dive** generates the full AI summary: in about 20–30 seconds you
+get the overview and the figures, and the per-figure analysis finishes streaming
+in over 1–2 minutes. Figures start rolled up — unroll any to read more, **click a
+figure to zoom** in on a panel, and **select any text to highlight** it.
 
 <p align="center">
   <img src="docs/screenshots/summary.png" alt="Overview and figure summaries" width="760">
@@ -140,10 +146,13 @@ there's no PaperWhirl server, and we never see it.
 
 ### What does it cost?
 
-PaperWhirl itself is free — you pay only for your own OpenAI usage. On the
-default frontier model, a paper typically costs on the order of tens of cents;
-on a cheaper tier it drops to a few cents. Two ways to keep costs down:
+PaperWhirl itself is free — you pay only for your own OpenAI usage, and only when
+you Deep Dive. **Scan mode is completely free** (it makes no AI calls). A Deep
+Dive on the default frontier model typically costs on the order of tens of cents;
+on a cheaper tier it drops to a few cents. Ways to keep costs down:
 
+- **Scan first, Deep Dive selectively.** Scan (the default) is free and instant —
+  triage with it, and only Deep Dive the papers worth the full summary.
 - **Choose a cheaper model.** PaperWhirl defaults to a frontier model for the
   best summaries, but you can switch to a cheaper tier (e.g. a *mini* or *nano*
   model) in Settings for a fraction of the cost.
