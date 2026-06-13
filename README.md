@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/hero.png" alt="A PaperWhirl summary with the Discuss panel open" width="840">
+  <img src="docs/screenshots/hero.png" alt="A PaperWhirl summary with the Scan/Deep Dive toggle and the Discuss panel open" width="840">
 </p>
 
 <p align="center">
